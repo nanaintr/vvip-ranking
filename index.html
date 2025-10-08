@@ -33,7 +33,7 @@
         <thead class="bg-slate-100 text-slate-700">
           <tr>
             <th class="text-left px-4 py-3">번호</th>
-            <th class="text-left px-4 py-3">아이디(마스킹)</th>
+            <th class="text-left px-4 py-3">아이디(개인정보보호)</th>
             <th class="text-right px-4 py-3">스피드온 베팅액</th>
             <th class="text-right px-4 py-3">예상 적립액(3%)</th>
           </tr>
@@ -99,7 +99,7 @@
         complete: (res) => {
           allRows = res.data.map(row => ({
             promoNo: row.promoNo?.trim(),
-            maskedCARDID: row.maskedCARDID?.trim(),
+            maskedID: row.maskedID?.trim(),
             betSum: row.betSum?.trim(),
             "3percent_payback": row["3percent_payback"]?.trim()
           }));
