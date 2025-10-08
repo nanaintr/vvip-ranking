@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>온라인 VVIP 3% 슈퍼 적립 현황</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+  <style>
+    .highlight { outline: 3px solid #60a5fa; background: #eff6ff; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace; }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-900">
+  <div class="max-w-4xl mx-auto px-4 py-8">
+    <header class="mb-6">
+      <h1 class="text-2xl md:text-3xl font-bold">VVIP 온라인 3% 적립 현황</h1>
+      <p class="text-sm text-slate-600 mt-1">※ 본 페이지는 참고용이며 최종 적립액은 내부 정산 기준에 따릅니다.</p>
+    </header>
+
+    <section class="mb-4">
+      <label for="search" class="block text-sm font-medium mb-2">프로모션 번호(1~100)</label>
+      <div class="flex gap-2">
+        <input id="search" type="number" min="1" max="100" placeholder="예: 27"
+               class="w-full rounded-lg border border-slate-300 px-3 py-2 focus:outline-none focus:ring focus:ring-blue-200" />
+        <button id="btnFind"
+                class="rounded-lg bg-blue-600 text-white px-4 py-2 hover:bg-blue-700">찾기</button>
+      </div>
+    </section>
+
+    <section class="overflow-x-auto bg-white rounded-2xl shadow">
+      <table class="min-w-full text-sm">
+        <thead class="bg-slate-100 text-slate-700">
+          <tr>
+            <th class="text-left px-4 py-3">번호</th>
+            <th class="text-left px-4 py-3">아이디(마스킹)</th>
+            <th class="text-right px-4 py-3">스피드온 베팅액</th>
+            <th class="text-right px-4 py-3">예상 적립액(3%)</th>
+          </tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </section>
+
+    <footer class="mt-6 text-xs text-slate-500">
+      <p>※ 랭킹은 주 1회 갱신됩니다. 최종 적립액은 제세공과금으로 인해 다소 차이가 있을 수 있습니다.</p>
+    </footer>
+  </div>
+
+  <script>
+    // ✅ 여기에 본인 시트의 CSV 링크 붙여넣기
+    const SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTazsjNo6e1OEyhahhSCR8uXHy2drKWgUa6vpsrL6cpWH9NOQIyTDsP6psIbvC9Dm8kWtPQID385vra/pub?output=csv";
+
+    const cleanMoney = (v) => {
+      if (v == null) return 0;
+      const s = String(v).replace(/[^\d.-]/g, "");
+      const n = parseFloat(s);
+      return isNaN(n) ? 0 : n;
+    };
+    const fmt = n => n.toLocaleString("ko-KR") + "원";
+
+    let allRows = [];
+    function render(rows) {
+      const tbody = document.getElementById("tbody");
+      tbody.innerHTML = "";
+      rows.sort((a, b) => Number(a.promoNo) - Number(b.promoNo));
+      for (const r of rows) {
+        const bet = cleanMoney(r.betSum);
+        const rebate = cleanMoney(r["3percent_payback"]) || Math.round(bet * 0.03);
+        const tr = document.createElement("tr");
+        tr.className = "border-t";
+        tr.dataset.promo = r.promoNo;
+        tr.innerHTML = `
+          <td class="px-4 py-3">${r.promoNo ?? ""}</td>
+          <td class="px-4 py-3 mono">${r.maskedCARDID ?? ""}</td>
+          <td class="px-4 py-3 text-right">${fmt(bet)}</td>
+          <td class="px-4 py-3 text-right font-semibold">${fmt(rebate)}</td>
+        `;
+        document.getElementById("tbody").appendChild(tr);
+      }
+    }
+
+    function highlightPromo(no) {
+      document.querySelectorAll("#tbody tr").forEach(tr => tr.classList.remove("highlight"));
+      const target = document.querySelector(`#tbody tr[data-promo='${no}']`);
+      if (target) {
+        target.classList.add("highlight");
+        target.scrollIntoView({ behavior: "smooth", block: "center" });
+      } else {
+        alert("해당 번호가 없습니다.");
+      }
+    }
+
+    function loadData() {
+      Papa.parse(SHEET_URL + (SHEET_URL.includes("?") ? "&" : "?") + "t=" + Date.now(), {
+        download: true,
+        header: true,
+        skipEmptyLines: true,
+        complete: (res) => {
+          allRows = res.data.map(row => ({
+            promoNo: row.promoNo?.trim(),
+            maskedCARDID: row.maskedCARDID?.trim(),
+            betSum: row.betSum?.trim(),
+            "3percent_payback": row["3percent_payback"]?.trim()
+          }));
+          render(allRows);
+        },
+        error: (err) => {
+          console.error(err);
+          alert("시트 데이터를 불러오지 못했습니다.");
+        }
+      });
+    }
+
+    document.getElementById("btnFind").addEventListener("click", () => {
+      const no = document.getElementById("search").value.trim();
+      if (!no) return;
+      highlightPromo(no);
+    });
+    document.getElementById("search").addEventListener("keydown", (e) => {
+      if (e.key === "Enter") document.getElementById("btnFind").click();
+    });
+
+    loadData();
+  </script>
+</body>
+</html>
