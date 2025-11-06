@@ -19,7 +19,7 @@
   <div class="max-w-5xl mx-auto px-4 py-8">
     <header class="mb-6">
       <h1 class="text-2xl md:text-3xl font-bold">VVIP 전용 3% 슈퍼 적립 현황(10.31.~11.2)</h1>
-      <p class="text-sm text-slate-600 mt-1">※ 본 페이지는 참고용이며 최종 적립액은 내부 정산 기준과 제세공과금 공제액에 따릅니다. 추후 쿠폰 수령 시 지급명세서 동의가 반드시 필요합니다.</p>
+      <p class="text-sm text-slate-600 mt-1">※ 적립은 11월 23일(일)까지 경륜과 경정 모두 적용됩니다. 본 페이지는 참고용이며 최종 적립액은 내부 정산 기준과 제세공과금 공제액에 따릅니다. 추후 쿠폰 수령 시 지급명세서 동의가 반드시 필요합니다.</p>
     </header>
 
     <section class="mb-4">
@@ -30,13 +30,15 @@
         <button id="btnFind"
                 class="rounded-lg bg-blue-600 text-white px-4 py-2 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed">찾기</button>
       </div>
-      <!-- 로딩/에러 안내 -->
       <p id="status" class="text-sm text-slate-500 mt-2">잠시만 기다려주세요.. 고객님의 순위는..?</p>
     </section>
 
     <!-- Top 10 고정 강조 영역 -->
     <section class="mb-6">
-      <h2 class="text-lg font-semibold mb-3">상위 10위</h2>
+      <div class="flex items-center justify-between">
+        <h2 class="text-lg font-semibold mb-3">상위 10위 (적립액 기준)</h2>
+        <span class="text-xs text-slate-500">※ 랭킹 = 예상 적립액(3%) 내림차순</span>
+      </div>
       <div id="top10" class="grid md:grid-cols-2 gap-3"></div>
     </section>
 
@@ -45,6 +47,7 @@
       <table class="min-w-full text-sm">
         <thead class="bg-slate-100 text-slate-700">
           <tr>
+            <th class="text-left px-4 py-3">랭킹</th>
             <th class="text-left px-4 py-3">번호</th>
             <th class="text-left px-4 py-3">아이디(개인정보보호)</th>
             <th class="text-right px-4 py-3">스피드온 베팅액</th>
@@ -61,7 +64,7 @@
   </div>
 
   <script>
-    // ✅ CSV 링크 교체
+    // ✅ CSV 링크
     const SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTazsjNo6e1OEyhahhSCR8uXHy2drKWgUa6vpsrL6cpWH9NOQIyTDsP6psIbvC9Dm8kWtPQID385vra/pub?output=csv";
 
     const statusEl = document.getElementById("status");
@@ -74,57 +77,59 @@
       const n = parseFloat(s);
       return isNaN(n) ? 0 : n;
     };
-    const fmt = n => n.toLocaleString("ko-KR") + "원";
+    const fmt = n => (Number.isFinite(n) ? n.toLocaleString("ko-KR") : "0") + "원";
 
-    let allRows = [];
+    let rawRows = [];
+    let rankedRows = [];
 
-    function render(rows) {
-      // 정렬
-      rows.sort((a, b) => Number(a.promoNo) - Number(b.promoNo));
-
-      // Top 10 카드 렌더
-      const top = rows.slice(0, 10);
-      const topWrap = document.getElementById("top10");
-      topWrap.innerHTML = top.map(r => {
+    function computeRanking(rows) {
+      // 1) 숫자화 + 적립액 계산
+      const enriched = rows.map(r => {
         const bet = cleanMoney(r.betSum);
         const rebate = cleanMoney(r["3percent_payback"]) || Math.round(bet * 0.03);
-        const rank = Number(r.promoNo);
-        const crown = rank === 1 ? "👑 " : (rank <= 3 ? "🏅 " : "");
-        const rankColor = rank === 1 ? "bg-yellow-400" : rank <=3 ? "bg-amber-300" : "bg-slate-200";
+        return {
+          promoNo: r.promoNo?.trim(),
+          maskedID: r.maskedID?.trim(),
+          bet,
+          rebate
+        };
+      });
+
+      // 2) 적립액 내림차순, 베팅액 보조 정렬(동점시)
+      enriched.sort((a, b) => {
+        if (b.rebate !== a.rebate) return b.rebate - a.rebate;
+        if (b.bet !== a.bet) return b.bet - a.bet;
+        // 동률 완전 동일할 때는 번호 오름차순(안전장치)
+        return Number(a.promoNo) - Number(b.promoNo);
+      });
+
+      // 3) 랭크 부여(1부터)
+      enriched.forEach((r, idx) => r.rank = idx + 1);
+
+      return enriched;
+    }
+
+    function renderTop10(rowsByRank) {
+      const top = rowsByRank.slice(0, 10);
+      const topWrap = document.getElementById("top10");
+      topWrap.innerHTML = top.map(r => {
+        const crown = r.rank === 1 ? "👑 " : (r.rank <= 3 ? "🏅 " : "");
+        const rankColor = r.rank === 1 ? "bg-yellow-400" : r.rank <= 3 ? "bg-amber-300" : "bg-slate-200";
         return `
           <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-4 flex items-center justify-between">
             <div class="flex items-center gap-3">
-              <span class="rank-badge ${rankColor} text-slate-900 rounded-full px-3 py-1 font-bold">${r.promoNo}</span>
+              <span class="rank-badge ${rankColor} text-slate-900 rounded-full px-3 py-1 font-bold">${r.rank}</span>
               <div>
                 <div class="font-semibold">${crown}<span class="mono">${r.maskedID ?? ""}</span></div>
-                <div class="text-xs text-slate-500">베팅: ${fmt(bet)} / 적립: <span class="font-semibold">${fmt(rebate)}</span></div>
+                <div class="text-xs text-slate-500">베팅: ${fmt(r.bet)} / 적립: <span class="font-semibold">${fmt(r.rebate)}</span></div>
+                <div class="text-[11px] text-slate-400 mt-0.5">고객번호: ${r.promoNo ?? "-"}</div>
               </div>
             </div>
             <button data-jump="${r.promoNo}" class="text-xs px-2 py-1 rounded border hover:bg-slate-50">표에서 보기</button>
           </div>`;
       }).join("");
 
-      // 전체 테이블 렌더
-      const tbody = document.getElementById("tbody");
-      tbody.innerHTML = "";
-      for (const r of rows) {
-        const bet = cleanMoney(r.betSum);
-        const rebate = cleanMoney(r["3percent_payback"]) || Math.round(bet * 0.03);
-        const tr = document.createElement("tr");
-        tr.className = "border-t";
-        tr.dataset.promo = r.promoNo;
-        const rank = Number(r.promoNo);
-        const strongClass = rank <= 10 ? "font-semibold" : "";
-        tr.innerHTML = `
-          <td class="px-4 py-3 ${strongClass}">${r.promoNo ?? ""}</td>
-          <td class="px-4 py-3 mono ${strongClass}">${r.maskedID ?? ""}</td>
-          <td class="px-4 py-3 text-right ${strongClass}">${fmt(bet)}</td>
-          <td class="px-4 py-3 text-right font-semibold ${rank<=10?'text-blue-700':''}">${fmt(rebate)}</td>
-        `;
-        tbody.appendChild(tr);
-      }
-
-      // Top10 카드의 "표에서 보기" 클릭 → 해당 행으로 스크롤
+      // Top10 카드의 "표에서 보기" → 해당 번호 행으로 스크롤
       topWrap.querySelectorAll("[data-jump]").forEach(btn => {
         btn.addEventListener("click", e => {
           const no = e.currentTarget.getAttribute("data-jump");
@@ -133,21 +138,42 @@
       });
     }
 
+    function renderTable(rowsByRank) {
+      const tbody = document.getElementById("tbody");
+      tbody.innerHTML = "";
+      for (const r of rowsByRank) {
+        const tr = document.createElement("tr");
+        tr.className = "border-t";
+        tr.dataset.promo = r.promoNo; // 검색용 식별은 계속 '번호'
+        const strongClass = r.rank <= 10 ? "font-semibold" : "";
+        tr.innerHTML = `
+          <td class="px-4 py-3 ${strongClass}">${r.rank}</td>
+          <td class="px-4 py-3 ${strongClass}">${r.promoNo ?? ""}</td>
+          <td class="px-4 py-3 mono ${strongClass}">${r.maskedID ?? ""}</td>
+          <td class="px-4 py-3 text-right ${strongClass}">${fmt(r.bet)}</td>
+          <td class="px-4 py-3 text-right font-semibold ${r.rank<=10?'text-blue-700':''}">${fmt(r.rebate)}</td>
+        `;
+        tbody.appendChild(tr);
+      }
+    }
+
+    function renderAll() {
+      rankedRows = computeRanking(rawRows);
+      renderTop10(rankedRows);
+      renderTable(rankedRows);
+    }
+
     function highlightPromo(no, fromTop10=false) {
-      // 입력 보정
       const n = Number(no);
       if (!n || n < 1 || n > 100) {
         alert("1부터 100 사이의 번호를 입력하세요.");
         return;
       }
-      // 기존 하이라이트 제거
       document.querySelectorAll("#tbody tr").forEach(tr => tr.classList.remove("highlight","flash"));
-      // 대상 행 찾기
       const target = document.querySelector(`#tbody tr[data-promo='${n}']`);
       if (target) {
         target.classList.add("highlight","flash");
         target.scrollIntoView({ behavior: "smooth", block: "center" });
-        // 검색창에 번호 반영(Top10 카드 클릭 시도 포함)
         if (fromTop10) document.getElementById("search").value = n;
       } else {
         alert("해당 번호가 없습니다.");
@@ -161,17 +187,16 @@
         header: true,
         skipEmptyLines: true,
         complete: (res) => {
-          allRows = res.data.map(row => ({
-            promoNo: row.promoNo?.trim(),
-            maskedID: row.maskedID?.trim(),
-            betSum: row.betSum?.trim(),
-            "3percent_payback": row["3percent_payback"]?.trim()
+          rawRows = res.data.map(row => ({
+            promoNo: row.promoNo,
+            maskedID: row.maskedID,
+            betSum: row.betSum,
+            "3percent_payback": row["3percent_payback"]
           }));
-          render(allRows);
-          statusEl.textContent = `총 ${allRows.length}건 로드됨`;
+          renderAll();
+          statusEl.textContent = `총 ${rawRows.length}건 로드됨 (적립액 기준 랭킹 산정)`;
           btn.disabled = false;
 
-          // URL 쿼리 ?no=27 지원 (선택)
           const params = new URLSearchParams(location.search);
           const queryNo = params.get("no");
           if (queryNo) highlightPromo(queryNo);
