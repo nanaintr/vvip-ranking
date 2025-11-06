@@ -25,7 +25,8 @@
     <section class="mb-4">
       <label for="search" class="block text-sm font-medium mb-2">고객님별 번호(1~100) *SMS로 안내해드린 번호입니다.</label>
       <div class="flex gap-2">
-        <input id="search" type="number" min="1" max="100" placeholder="예: 27"
+        <!-- ⑤ 모바일 숫자 키패드 -->
+        <input id="search" type="number" inputmode="numeric" pattern="[0-9]*" min="1" max="100" placeholder="예: 27"
                class="w-full rounded-lg border border-slate-300 px-3 py-2 focus:outline-none focus:ring focus:ring-blue-200" />
         <button id="btnFind"
                 class="rounded-lg bg-blue-600 text-white px-4 py-2 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed">찾기</button>
@@ -34,12 +35,21 @@
     </section>
 
     <!-- Top 10 고정 강조 영역 -->
-    <section class="mb-6">
+    <section class="mb-4">
       <div class="flex items-center justify-between">
         <h2 class="text-lg font-semibold mb-3">상위 10위 (적립액 기준)</h2>
         <span class="text-xs text-slate-500">※ 랭킹 = 예상 적립액(3%) 내림차순</span>
       </div>
       <div id="top10" class="grid md:grid-cols-2 gap-3"></div>
+    </section>
+
+    <!-- ③ 정렬 토글 버튼 -->
+    <section class="mb-2">
+      <div class="flex gap-2">
+        <button data-sort="rebate" class="sortbtn px-3 py-1 rounded border bg-white hover:bg-slate-50">적립액순</button>
+        <button data-sort="bet" class="sortbtn px-3 py-1 rounded border bg-white hover:bg-slate-50">베팅액순</button>
+        <button data-sort="promo" class="sortbtn px-3 py-1 rounded border bg-white hover:bg-slate-50">번호순</button>
+      </div>
     </section>
 
     <!-- 전체 랭킹 테이블 -->
@@ -50,8 +60,10 @@
             <th class="text-left px-4 py-3">랭킹</th>
             <th class="text-left px-4 py-3">번호</th>
             <th class="text-left px-4 py-3">아이디(개인정보보호)</th>
-            <th class="text-right px-4 py-3">스피드온 베팅액</th>
+            <!-- ＊모바일에서 적립액이 먼저 보이도록 컬럼 순서 변경 -->
             <th class="text-right px-4 py-3">예상 적립액(3%)</th>
+            <!-- 베팅액은 모바일에선 숨김, md 이상에서 표시 -->
+            <th class="text-right px-4 py-3 hidden md:table-cell">스피드온 베팅액</th>
           </tr>
         </thead>
         <tbody id="tbody"></tbody>
@@ -71,11 +83,12 @@
     const btn = document.getElementById("btnFind");
     btn.disabled = true;
 
+    // ④ 금액 파싱 더 안전하게
     const cleanMoney = (v) => {
       if (v == null) return 0;
       const s = String(v).replace(/[^\d.-]/g, "");
-      const n = parseFloat(s);
-      return isNaN(n) ? 0 : n;
+      const n = Number(s);
+      return Number.isFinite(n) ? n : 0;
     };
     const fmt = n => (Number.isFinite(n) ? n.toLocaleString("ko-KR") : "0") + "원";
 
@@ -95,17 +108,17 @@
         };
       });
 
-      // 2) 적립액 내림차순, 베팅액 보조 정렬(동점시)
+      // ① 동률 처리 강화: 적립액 ↓, 베팅액 ↓, 번호 ↑, ID 알파벳 ↑
       enriched.sort((a, b) => {
         if (b.rebate !== a.rebate) return b.rebate - a.rebate;
         if (b.bet !== a.bet) return b.bet - a.bet;
-        // 동률 완전 동일할 때는 번호 오름차순(안전장치)
-        return Number(a.promoNo) - Number(b.promoNo);
+        const an = Number(a.promoNo), bn = Number(b.promoNo);
+        if (an !== bn) return an - bn;
+        return String(a.maskedID || "").localeCompare(String(b.maskedID || ""), "ko");
       });
 
       // 3) 랭크 부여(1부터)
       enriched.forEach((r, idx) => r.rank = idx + 1);
-
       return enriched;
     }
 
@@ -150,8 +163,9 @@
           <td class="px-4 py-3 ${strongClass}">${r.rank}</td>
           <td class="px-4 py-3 ${strongClass}">${r.promoNo ?? ""}</td>
           <td class="px-4 py-3 mono ${strongClass}">${r.maskedID ?? ""}</td>
-          <td class="px-4 py-3 text-right ${strongClass}">${fmt(r.bet)}</td>
-          <td class="px-4 py-3 text-right font-semibold ${r.rank<=10?'text-blue-700':''}">${fmt(r.rebate)}</td>
+          <!-- ② 금액들 줄바꿈 방지 + 등폭 숫자 -->
+          <td class="px-4 py-3 text-right whitespace-nowrap tabular-nums font-semibold ${r.rank<=10?'text-blue-700':''}">${fmt(r.rebate)}</td>
+          <td class="px-4 py-3 text-right whitespace-nowrap tabular-nums ${strongClass} hidden md:table-cell">${fmt(r.bet)}</td>
         `;
         tbody.appendChild(tr);
       }
@@ -197,9 +211,13 @@
           statusEl.textContent = `총 ${rawRows.length}건 로드됨 (적립액 기준 랭킹 산정)`;
           btn.disabled = false;
 
+          // ⑥ 딥링크 후 주소 정리
           const params = new URLSearchParams(location.search);
           const queryNo = params.get("no");
-          if (queryNo) highlightPromo(queryNo);
+          if (queryNo) {
+            highlightPromo(queryNo);
+            history.replaceState({}, "", location.pathname);
+          }
         },
         error: (err) => {
           console.error(err);
@@ -214,6 +232,27 @@
     });
     document.getElementById("search").addEventListener("keydown", (e) => {
       if (e.key === "Enter") document.getElementById("btnFind").click();
+    });
+    // ⑤ 모바일 포커스 시 살짝 상단 이동(키보드로 가려지는 것 방지용)
+    document.getElementById("search").addEventListener("focus",()=>{
+      setTimeout(()=> window.scrollTo({top: 0, behavior:"smooth"}), 50);
+    });
+
+    // ③ 정렬 토글 리스너
+    document.querySelectorAll('.sortbtn').forEach(b=>{
+      b.addEventListener('click', e=>{
+        const k = e.currentTarget.dataset.sort;
+        let rows = [...rankedRows];
+        if (k === 'bet') {
+          rows.sort((a,b)=> b.bet - a.bet || a.rank - b.rank);
+        } else if (k === 'promo') {
+          rows.sort((a,b)=> Number(a.promoNo) - Number(b.promoNo));
+        } else {
+          rows = computeRanking(rawRows); // 적립액순(기본)
+        }
+        renderTop10(rows);
+        renderTable(rows);
+      });
     });
 
     loadData();
